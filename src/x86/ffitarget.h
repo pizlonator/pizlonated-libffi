@@ -81,7 +81,13 @@ typedef signed long            ffi_sarg;
 #endif
 
 typedef enum ffi_abi {
-#if defined(X86_WIN64)
+#if defined(__FILC__)
+  FFI_FIRST_ABI = 0,
+  FFI_FILC,
+  FFI_UNIX64 = FFI_FILC,
+  FFI_LAST_ABI,
+  FFI_DEFAULT_ABI = FFI_FILC
+#elif defined(X86_WIN64)
   FFI_FIRST_ABI = 0,
   FFI_WIN64,            /* sizeof(long double) == 8  - microsoft compilers */
   FFI_GNUW64,           /* sizeof(long double) == 16 - GNU compilers */

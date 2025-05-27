@@ -31,6 +31,28 @@
 #define _GNU_SOURCE 1
 #endif
 
+#ifdef __FILC__
+
+extern void ffi_closure_callback(void);
+
+void *
+ffi_closure_alloc (size_t size, void **code)
+{
+  *code = zclosure_new(ffi_closure_callback, NULL);
+  return *code;
+}
+
+void
+ffi_closure_free (__attribute__((unused)) void *ptr)
+{
+}
+
+int ffi_tramp_is_present(__attribute__((unused)) void *ptr)
+{
+  return 0;
+}
+
+#else /* __FILC__ -> so !__FILC__ */
 #ifndef __EMSCRIPTEN__
 
 #include <fficonfig.h>
@@ -1105,3 +1127,5 @@ ffi_tramp_is_present (__attribute__((unused)) void *ptr)
 
 #endif /* NetBSD with PROT_MPROTECT */
 #endif /* __EMSCRIPTEN__ */
+#endif /* !__FILC__ */
+
