@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <tramp.h>
 #include "internal64.h"
 
@@ -69,8 +70,16 @@ struct register_args
   UINT64 r10;	/* static chain */
 };
 
+#ifdef __FILC__
+static bool is_filc = true;
+#else
+static bool is_filc = false;
+#endif
+
+#ifndef __FILC__
 extern void ffi_call_unix64 (void *args, unsigned long bytes, unsigned flags,
 			     void *raddr, void (*fnaddr)(void)) FFI_HIDDEN;
+#endif
 
 /* All reference to register classes here is identical to the code in
    gcc/config/i386/i386.c. Do *not* change one without the other.  */
@@ -356,6 +365,9 @@ examine_argument (ffi_type *type, enum x86_64_reg_class classes[MAX_CLASSES],
   unsigned int i;
   int ngpr, nsse;
 
+  if (is_filc ())
+    return 0;
+  
   n = classify_argument (type, classes, 0);
   if (n == 0)
     return 0;
@@ -392,7 +404,7 @@ examine_argument (ffi_type *type, enum x86_64_reg_class classes[MAX_CLASSES],
 
 /* Perform machine dependent cif processing.  */
 
-#ifndef __ILP32__
+#if !defined(__ILP32__) && !defined(__FILC__)
 extern ffi_status
 ffi_prep_cif_machdep_efi64(ffi_cif *cif);
 #endif
@@ -406,12 +418,17 @@ ffi_prep_cif_machdep (ffi_cif *cif)
   size_t bytes, n, rtype_size;
   ffi_type *rtype;
 
-#ifndef __ILP32__
+#ifdef __FILC
+  if (cif->abi != FII_FILC)
+    return FFI_BAD_ABI;
+#else
+# ifndef __ILP32__
   if (cif->abi == FFI_EFI64 || cif->abi == FFI_GNUW64)
     return ffi_prep_cif_machdep_efi64(cif);
-#endif
+# endif
   if (cif->abi != FFI_UNIX64)
     return FFI_BAD_ABI;
+#endif
 
   gprcount = ssecount = 0;
 
@@ -530,7 +547,8 @@ ffi_prep_cif_machdep (ffi_cif *cif)
      not, add it's size to the stack byte count.  */
   for (bytes = 0, i = 0, avn = cif->nargs; i < avn; i++)
     {
-      if (examine_argument (cif->arg_types[i], classes, 0, &ngpr, &nsse) == 0
+      if (is_filc
+          || examine_argument (cif->arg_types[i], classes, 0, &ngpr, &nsse) == 0
 	  || gprcount + ngpr > MAX_GPR_REGS
 	  || ssecount + nsse > MAX_SSE_REGS)
 	{
@@ -561,6 +579,49 @@ static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
 {
+#ifdef __FILC__
+  char *stack, *argp;
+  ffi_type **arg_types;
+  int i, avn;
+  void *rets;
+
+  FFI_ASSERT (cif->abi == FFI_FILC);
+
+  stack = alloca (cif->bytes);
+  argp = stack;
+
+  if (flags & UNIX64_FLAG_RET_IN_MEM)
+    {
+      if (rvalue == NULL)
+        rvalue = alloca (cif->rtype->size);
+
+      *(void **) argp = rvalue;
+      argp += sizeof (void*);
+    }
+
+  arg_types = cif->arg_types;
+  avn = cif->nargs;
+
+  for (i = 0; i < avn; ++i)
+    {
+      long align = arg_types[i]->alignment;
+
+      if (align < 8)
+        align = 8;
+
+      argp = (void *) FFI_ALIGN (argp, align);
+      memcpy (argp, avalue[i], size);
+
+      argp += size;
+    }
+
+  FFI_ASSERT (argp == stack + cif->bytes);
+
+  rets = zcall (fn, stack);
+
+  if (rvalue != NULL && !(flags & UNIX64_FLAG_RET_IN_MEM))
+    memcpy (rvalue, rets, cif->rtype->size);
+#else
   enum x86_64_reg_class classes[MAX_CLASSES];
   char *stack, *argp;
   ffi_type **arg_types;
@@ -672,6 +733,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 
   ffi_call_unix64 (stack, cif->bytes + sizeof (struct register_args),
 		   flags, rvalue, fn);
+#endif
 }
 
 #ifndef __ILP32__
@@ -700,7 +762,7 @@ ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
         }
     }
 
-#ifndef __ILP32__
+#if !defined(__ILP32__) && !defined(__FILC__)
   if (cif->abi == FFI_EFI64 || cif->abi == FFI_GNUW64)
     {
       ffi_call_efi64(cif, fn, rvalue, avalue);
