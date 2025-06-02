@@ -586,6 +586,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
   void *rets;
 
   FFI_ASSERT (cif->abi == FFI_FILC);
+  FFI_ASSERT (closure == NULL);
 
   stack = alloca (cif->bytes);
   argp = stack;
@@ -604,6 +605,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 
   for (i = 0; i < avn; ++i)
     {
+      size_t size = size = arg_types[i]->size;
       long align = arg_types[i]->alignment;
 
       if (align < 8)
@@ -736,7 +738,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 #endif
 }
 
-#ifndef __ILP32__
+#if !defined(__ILP32__) && !defined(__FILC__)
 extern void
 ffi_call_efi64(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue);
 #endif
@@ -803,7 +805,7 @@ extern void ffi_closure_unix64_alt(void) FFI_HIDDEN;
 extern void ffi_closure_unix64_sse_alt(void) FFI_HIDDEN;
 #endif
 
-#ifndef __ILP32__
+#if !defined(__ILP32__) && !defined(__FILC__)
 extern ffi_status
 ffi_prep_closure_loc_efi64(ffi_closure* closure,
 			   ffi_cif* cif,
@@ -819,6 +821,9 @@ ffi_prep_closure_loc (ffi_closure* closure,
 		      void *user_data,
 		      void *codeloc)
 {
+#ifdef __FILC__
+  zclosure_set_data (codeloc, closure);
+#else
   static const unsigned char trampoline[24] = {
     /* endbr64 */
     0xf3, 0x0f, 0x1e, 0xfa,
@@ -864,6 +869,7 @@ ffi_prep_closure_loc (ffi_closure* closure,
 #if defined(FFI_EXEC_STATIC_TRAMP)
 out:
 #endif
+#endif
   closure->cif = cif;
   closure->fun = fun;
   closure->user_data = user_data;
@@ -871,6 +877,57 @@ out:
   return FFI_OK;
 }
 
+#ifdef __FILC__
+void FFI_HIDDEN
+ffi_closure_callback (void)
+{
+  ffi_closure *closure;
+  ffi_cif *cif;
+  void (*fun)(ffi_cif*, void*, void**, void*);
+  char *argp;
+  void *user_data, **avalue, *rvalue;
+  int i, avn, flags;
+  ffi_type **arg_types;
+
+  closure = zcallee_closure_data ();
+  cif = closure->cif;
+  fun = closure->fun;
+  user_data = closure->user_data;
+
+  avn = cif->nargs;
+  flags = cif->flags;
+  arg_types = cif->arg_types;
+
+  argp = zargs ();
+
+  avalue = alloca (avn * sizeof (void *));
+
+  if (flags & UNIX64_FLAG_RET_IN_MEM)
+    {
+      rvalue = *(void **) argp;
+      argp += sizeof (void*);
+    }
+  else
+    rvalue = alloca (cif->rtype->size);
+
+  for (i = 0; i < avn; ++i)
+    {
+      long align = arg_types[i]->alignment;
+
+      if (align < 8)
+        align = 8;
+
+      argp = (void *) FFI_ALIGN (argp, align);
+      avalue[i] = argp;
+      argp += arg_types[i]->size;
+    }
+
+  fun (cif, rvalue, avalue, user_data);
+
+  if (!(flags & UNIX64_FLAG_RET_IN_MEM))
+    zreturn (rvalue);
+}
+#else
 int FFI_HIDDEN
 ffi_closure_unix64_inner(ffi_cif *cif,
 			 void (*fun)(ffi_cif*, void*, void**, void*),
@@ -963,6 +1020,7 @@ ffi_closure_unix64_inner(ffi_cif *cif,
   /* Tell assembly how to perform return type promotions.  */
   return flags;
 }
+#endif
 
 #ifdef FFI_GO_CLOSURES
 

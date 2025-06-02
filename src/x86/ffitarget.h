@@ -136,7 +136,9 @@ typedef enum ffi_abi {
 /* ---- Definitions for closures ----------------------------------------- */
 
 #define FFI_CLOSURES 1
+#ifndef __FILC__
 #define FFI_GO_CLOSURES 1
+#endif
 
 #define FFI_TYPE_SMALL_STRUCT_1B (FFI_TYPE_LAST + 1)
 #define FFI_TYPE_SMALL_STRUCT_2B (FFI_TYPE_LAST + 2)

@@ -33,7 +33,7 @@
 
 #ifdef __FILC__
 
-extern void ffi_closure_callback(void);
+extern void ffi_closure_callback (void);
 
 void *
 ffi_closure_alloc (size_t size, void **code)
