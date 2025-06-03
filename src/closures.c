@@ -31,7 +31,16 @@
 #define _GNU_SOURCE 1
 #endif
 
+#ifndef __EMSCRIPTEN__
+
+#include <fficonfig.h>
+#include <ffi.h>
+#include <ffi_common.h>
+#include <tramp.h>
+
 #ifdef __FILC__
+
+#include <stdfil.h>
 
 extern void ffi_closure_callback (void);
 
@@ -53,13 +62,6 @@ int ffi_tramp_is_present(__attribute__((unused)) void *ptr)
 }
 
 #else /* __FILC__ -> so !__FILC__ */
-#ifndef __EMSCRIPTEN__
-
-#include <fficonfig.h>
-#include <ffi.h>
-#include <ffi_common.h>
-#include <tramp.h>
-
 #ifdef __NetBSD__
 #include <sys/param.h>
 #endif
@@ -1126,6 +1128,6 @@ ffi_tramp_is_present (__attribute__((unused)) void *ptr)
 #endif /* FFI_CLOSURES */
 
 #endif /* NetBSD with PROT_MPROTECT */
-#endif /* __EMSCRIPTEN__ */
 #endif /* !__FILC__ */
+#endif /* __EMSCRIPTEN__ */
 

@@ -37,6 +37,10 @@
 #include <tramp.h>
 #include "internal64.h"
 
+#ifdef __FILC__
+#include <stdfil.h>
+#endif
+
 #ifdef __x86_64__
 
 #define MAX_GPR_REGS 6
@@ -365,9 +369,6 @@ examine_argument (ffi_type *type, enum x86_64_reg_class classes[MAX_CLASSES],
   unsigned int i;
   int ngpr, nsse;
 
-  if (is_filc ())
-    return 0;
-  
   n = classify_argument (type, classes, 0);
   if (n == 0)
     return 0;
@@ -418,8 +419,8 @@ ffi_prep_cif_machdep (ffi_cif *cif)
   size_t bytes, n, rtype_size;
   ffi_type *rtype;
 
-#ifdef __FILC
-  if (cif->abi != FII_FILC)
+#ifdef __FILC__
+  if (cif->abi != FFI_FILC)
     return FFI_BAD_ABI;
 #else
 # ifndef __ILP32__
@@ -582,7 +583,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 #ifdef __FILC__
   char *stack, *argp;
   ffi_type **arg_types;
-  int i, avn;
+  int i, avn, flags;
   void *rets;
 
   FFI_ASSERT (cif->abi == FFI_FILC);
@@ -591,6 +592,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
   stack = alloca (cif->bytes);
   argp = stack;
 
+  flags = cif->flags;
   if (flags & UNIX64_FLAG_RET_IN_MEM)
     {
       if (rvalue == NULL)
@@ -746,8 +748,10 @@ ffi_call_efi64(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue);
 void
 ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 {
+#ifndef __FILC__
   ffi_type **arg_types = cif->arg_types;
   int i, nargs = cif->nargs;
+
   const int max_reg_struct_size = cif->abi == FFI_GNUW64 ? 8 : 16;
 
   /* If we have any large structure arguments, make a copy so we are passing
@@ -764,12 +768,13 @@ ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
         }
     }
 
-#if !defined(__ILP32__) && !defined(__FILC__)
+#ifndef __ILP32__
   if (cif->abi == FFI_EFI64 || cif->abi == FFI_GNUW64)
     {
       ffi_call_efi64(cif, fn, rvalue, avalue);
       return;
     }
+#endif
 #endif
   ffi_call_int (cif, fn, rvalue, avalue, NULL);
 }
