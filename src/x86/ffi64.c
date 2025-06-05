@@ -584,15 +584,20 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
   char *stack, *argp;
   ffi_type **arg_types;
   int i, avn, flags;
+  size_t bytes;
   void *rets;
 
   FFI_ASSERT (cif->abi == FFI_FILC);
   FFI_ASSERT (closure == NULL);
 
-  stack = alloca (cif->bytes);
+  flags = cif->flags;
+  bytes = cif->bytes;
+  if (flags & UNIX64_FLAG_RET_IN_MEM)
+    bytes += sizeof (void*);
+
+  stack = alloca (bytes);
   argp = stack;
 
-  flags = cif->flags;
   if (flags & UNIX64_FLAG_RET_IN_MEM)
     {
       if (rvalue == NULL)
